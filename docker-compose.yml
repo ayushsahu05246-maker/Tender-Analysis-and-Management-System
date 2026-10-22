@@ -1,0 +1,60 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: tams-db
+    environment:
+      POSTGRES_DB: tams
+      POSTGRES_USER: tams
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-tams_secure_pwd_2026}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tams -d tams"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tams-backend
+    ports:
+      - "3399:8000"
+    environment:
+      - DATABASE_URL=postgresql://tams:${DB_PASSWORD:-tams_secure_pwd_2026}@db:5432/tams
+      - SECRET_KEY=${SECRET_KEY:-tams_production_secret_key_change_this_2026}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - REFRESH_TOKEN_EXPIRE_DAYS=7
+      - DEBUG=False
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - CORS_ORIGINS=["http://localhost:3838","http://185.215.166.90:3838"]
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: tams-frontend
+    ports:
+      - "3838:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  backend_uploads:
